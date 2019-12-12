@@ -105,7 +105,8 @@ ui <- fluidPage(
                                  dataTableOutput("allowed")),
                         tabPanel("Rankings", dataTableOutput("rankings")),
                         tabPanel("Analysis", dataTableOutput("analysis")),
-                        tabPanel("Instructions", includeMarkdown("instructions.md"))
+                        tabPanel("Instructions", includeMarkdown("README.md"))
+                        # tabPanel("Instructions", includeMarkdown("instructions.md"))
             )
         )
     )
