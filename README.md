@@ -32,7 +32,8 @@ Scoring
 
 -   Here is the formula.
 
-$$S = \frac{1}{n}\sum_{t=1}{n}(f_t-o_t)^2$$
+Sum<sub>all games(t)</sub>[f<sub>t</sub>-o<sub>t</sub>]^2
+
 
 Where
 

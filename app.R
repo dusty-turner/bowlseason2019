@@ -86,24 +86,28 @@ fulldata =
 ### end live data getter
 
 
-
+library(shinyjs)
 ui <- fluidPage(
+    useShinyjs(),
     theme = shinytheme("journal"),
     titlePanel("Welcome to 2019 NCAA Bowl Pick'em!"),
-    sidebarLayout(
-        sidebarPanel(width = 4,
+    sidebarLayout(position = "right",
+        div( id ="Sidebar",sidebarPanel(width = 4,
 
                      htmlOutput("googleForm")
-        ),
+        )),
         mainPanel(
-            textInput("email", "Enter your email:", value = "your.email@here.com"),
-            numericInput("pin", "Enter your pin:", value = "0000",min = 0, max = 9999),
+            actionButton("toggleSidebar", "Show / Hide Picker Window"),
+            tags$h3("To view your picks, type in your email and pin:"),
+            div(style="display:inline-block",textInput("email", "Enter your email:", value = "your.email@here.com")),
+            div(style="display:inline-block",numericInput("pin", "Enter your pin:", value = "0000",min = 0, max = 9999)),
             tabsetPanel(selected = "Instructions",
                         tabPanel("Your Selections", dataTableOutput("bigtable")),
                         tabPanel("All Selections", 
                                  tags$h3("Once a game begins, other players predictions will populate below."),
                                  dataTableOutput("allowed")),
                         tabPanel("Rankings", dataTableOutput("rankings")),
+                        tabPanel("Gameinfo", dataTableOutput("gameinfo")),
                         tabPanel("Analysis", dataTableOutput("analysis")),
                         tabPanel("Instructions", includeMarkdown("README.md"))
                         # tabPanel("Instructions", includeMarkdown("instructions.md"))
@@ -116,11 +120,15 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
     
+    observeEvent(input$toggleSidebar, {
+        shinyjs::toggleElement(id = "Sidebar")
+    })
+
     output$googleForm <- renderUI({
         tags$iframe(
             id = "googleform",
             src = googleform_embed_link,
-            width = 475,
+            width = 450,
             height = 1000,
             frameborder = 25,
             marginheight = 0
@@ -137,7 +145,7 @@ server <- function(input, output) {
         rdata =
             data %>%
             janitor::clean_names() %>%
-            rename(pin = provide_a_4_digit_pin_so_you_can_access_your_data_in_the_app) %>% 
+            rename(pin = provide_a_4_digit_pin_so_you_can_access_your_data_in_the_app_and_update_your_picks_at_a_later_date) %>% 
             pivot_longer(cols = -c(1:2,42), names_to = "bowl") %>%
             separate(bowl, sep = "_or_", c("home", "away")) %>% 
             mutate(home = str_remove(home, "a_"), away = str_remove(away, "b_")) %>%
@@ -180,7 +188,7 @@ server <- function(input, output) {
             select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) 
             
         return(rthis)
-    }, filter = 'top')
+    }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
 
     output$allowed = renderDataTable({
         input$refresh
@@ -189,9 +197,8 @@ server <- function(input, output) {
             # mutate(show = if_else(time<Sys.time()+lubridate::weeks(2),TRUE,FALSE)) %>% 
             filter(show == TRUE) %>% 
             select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) 
-            
         return(rthis)
-    }, filter = 'top')
+    }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
     
     output$rankings = renderDataTable({
         rankingsoutput =
@@ -199,7 +206,14 @@ server <- function(input, output) {
             forappdata() %>%
             group_by(email_address) %>%
             summarise(Points = sum(Points))
-    })
+    }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
+
+    output$gameinfo = renderDataTable({
+        gameinfooutput =
+            fulldata %>%
+            select(bowl,home,away,time,homepred,awaypred,homeproblose,awayproblose,homescore,awayscore)
+        return(gameinfooutput)
+    }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
     
     
 }
