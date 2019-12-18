@@ -60,19 +60,35 @@ getter = function(url = url) {
     return(game)
 }
 
+rdata %>% 
+    filter(email_address == "dusty.s.turner@gmail.com") %>% 
+    select(gameid)
+
 url = "http://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?seasontype=3&week=1&year=2020"
+url2 = "http://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?seasontype=3&dates=2020"
 
 raw.result1 <- GET(url = url)
 this.raw.content1 <- rawToChar(raw.result1$content)
 this.content1 <- fromJSON(this.raw.content1)
 # listviewer::jsonedit(this.content1)
 
-scorevec =
+raw.result2 <- GET(url = url2)
+this.raw.content2 <- rawToChar(raw.result2$content)
+this.content2 <- fromJSON(this.raw.content2)
+listviewer::jsonedit(this.content2)
+
+scorevec1 =
     this.content1$events$competitions %>%
     map("competitors") %>% purrr::flatten() %>%
     map("score") %>% unlist()
 
-scorevec = append(scorevec,c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
+scorevec2 =
+    this.content2$events$competitions %>%
+    map("competitors") %>% purrr::flatten() %>%
+    map("score") %>% unlist()
+
+# scorevec = append(scorevec,c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
+scorevec = append(scorevec1,scorevec2)
 
 fulldata =
     map_df(urls$links[-40], ~getter(.)) %>%
@@ -142,8 +158,27 @@ server <- function(input, output) {
             gs_read(range = "A1:AP1107") %>% 
             mutate(Timestamp = lubridate::mdy_hms(Timestamp))
         
+        baseline = 
+        data %>% select(`Email Address`,`Provide a 4 digit pin (so you can access your data in the app - and update your picks at a later date)`) %>% 
+            group_by(`Email Address`,`Provide a 4 digit pin (so you can access your data in the app - and update your picks at a later date)`) %>% 
+            distinct() %>% 
+            ungroup()
+        
+        baseline2 =
+        data %>% 
+            select(-c(`Email Address`,`Provide a 4 digit pin (so you can access your data in the app - and update your picks at a later date)`,Timestamp)) %>% 
+            slice(1) %>% 
+            mutate_if(is.double, ~50) %>% 
+            mutate(Timestamp = ymd_hms("2018-12-09 20:38:58")) %>%
+            slice(rep(1:n(), each=nrow(baseline)))
+            
+        baseline3 =
+            bind_cols(baseline,baseline2) 
+
+        
         rdata =
-            data %>%
+            baseline3 %>% 
+            bind_rows(data) %>%
             janitor::clean_names() %>%
             rename(pin = provide_a_4_digit_pin_so_you_can_access_your_data_in_the_app_and_update_your_picks_at_a_later_date) %>% 
             pivot_longer(cols = -c(1:2,42), names_to = "bowl") %>%
@@ -156,7 +191,7 @@ server <- function(input, output) {
                                     value > 50 ~ away,
                                     TRUE ~ "abstain")) %>%
             full_join(fulldata %>%
-                          select(home, away, bowl, time,homescore,awayscore),
+                          select(home, away, bowl, time,homescore,awayscore,gameid),
                       by = c("home", "away")) %>%
             filter(!is.na(value)) %>%
             filter(timestamp < time) %>%
@@ -185,6 +220,7 @@ server <- function(input, output) {
         rthis = forappdata() %>%
             mutate(pin = if_else(time<Sys.time(),99999,pin)) %>% 
             filter(email_address == input$email & pin == input$pin) %>% 
+            arrange(time) %>% 
             select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) 
             
         return(rthis)
@@ -211,7 +247,7 @@ server <- function(input, output) {
     output$gameinfo = renderDataTable({
         gameinfooutput =
             fulldata %>%
-            select(bowl,home,away,time,homepred,awaypred,homeproblose,awayproblose,homescore,awayscore)
+            select(bowl,home,away,time,homepred,awaypred,homescore,awayscore)
         return(gameinfooutput)
     }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
     
