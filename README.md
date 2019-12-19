@@ -5,7 +5,7 @@ Instructions
 
 Here are the instructions:
 
-Using the Google form embeded to the left, make your selections.
+Using the Google form embeded to the right, make your selections.
 ----------------------------------------------------------------
 
 -   ‘0’ means you have 100% confidence that team ‘A’ will win.

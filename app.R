@@ -60,9 +60,9 @@ getter = function(url = url) {
     return(game)
 }
 
-rdata %>% 
-    filter(email_address == "dusty.s.turner@gmail.com") %>% 
-    select(gameid)
+# rdata %>% 
+#     filter(email_address == "dusty.s.turner@gmail.com") %>% 
+#     select(gameid)
 
 url = "http://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?seasontype=3&week=1&year=2020"
 url2 = "http://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?seasontype=3&dates=2020"
@@ -123,8 +123,12 @@ ui <- fluidPage(
                                  tags$h3("Once a game begins, other players predictions will populate below."),
                                  dataTableOutput("allowed")),
                         tabPanel("Rankings", dataTableOutput("rankings")),
-                        tabPanel("Gameinfo", dataTableOutput("gameinfo")),
-                        tabPanel("Analysis", dataTableOutput("analysis")),
+                        tabPanel("Game Info", 
+                                 tags$h3("All the following information comes directly from ESPN's bowl game predictions."),
+                                 dataTableOutput("gameinfo")),
+                        tabPanel("Analysis", 
+                                 tags$h3("Analysis of picks and results to follow once games begin."),
+                                 dataTableOutput("analysis")),
                         tabPanel("Instructions", includeMarkdown("README.md"))
                         # tabPanel("Instructions", includeMarkdown("instructions.md"))
             )
@@ -159,14 +163,14 @@ server <- function(input, output) {
             mutate(Timestamp = lubridate::mdy_hms(Timestamp))
         
         baseline = 
-        data %>% select(`Email Address`,`Provide a 4 digit pin (so you can access your data in the app - and update your picks at a later date)`) %>% 
-            group_by(`Email Address`,`Provide a 4 digit pin (so you can access your data in the app - and update your picks at a later date)`) %>% 
+        data %>% select(`Email Address`,`Provide a 4 digit pin between 1000 and 9999 (so you can access your data in the app - and update your picks at a later date).`) %>% 
+            group_by(`Email Address`,`Provide a 4 digit pin between 1000 and 9999 (so you can access your data in the app - and update your picks at a later date).`) %>% 
             distinct() %>% 
             ungroup()
         
         baseline2 =
         data %>% 
-            select(-c(`Email Address`,`Provide a 4 digit pin (so you can access your data in the app - and update your picks at a later date)`,Timestamp)) %>% 
+            select(-c(`Email Address`,`Provide a 4 digit pin between 1000 and 9999 (so you can access your data in the app - and update your picks at a later date).`,Timestamp)) %>% 
             slice(1) %>% 
             mutate_if(is.double, ~50) %>% 
             mutate(Timestamp = ymd_hms("2018-12-09 20:38:58")) %>%
@@ -175,12 +179,11 @@ server <- function(input, output) {
         baseline3 =
             bind_cols(baseline,baseline2) 
 
-        
         rdata =
             baseline3 %>% 
             bind_rows(data) %>%
             janitor::clean_names() %>%
-            rename(pin = provide_a_4_digit_pin_so_you_can_access_your_data_in_the_app_and_update_your_picks_at_a_later_date) %>% 
+            rename(pin = provide_a_4_digit_pin_between_1000_and_9999_so_you_can_access_your_data_in_the_app_and_update_your_picks_at_a_later_date) %>% 
             pivot_longer(cols = -c(1:2,42), names_to = "bowl") %>%
             separate(bowl, sep = "_or_", c("home", "away")) %>% 
             mutate(home = str_remove(home, "a_"), away = str_remove(away, "b_")) %>%
@@ -221,7 +224,10 @@ server <- function(input, output) {
             mutate(pin = if_else(time<Sys.time(),99999,pin)) %>% 
             filter(email_address == input$email & pin == input$pin) %>% 
             arrange(time) %>% 
-            select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) 
+            select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) %>% 
+            rename(`Email Address` = email_address, Bowl = bowl, Home = home, `Home Score` = homescore,
+                   Away = away, `Away Score` = awayscore, Pick = pick, `Calculated Confidence` = confidence,
+                   `Points If Correct` = pointsifcorrect, `Points If Wrong` = pointsifwrong, Winner = winner)
             
         return(rthis)
     }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
@@ -232,7 +238,10 @@ server <- function(input, output) {
             mutate(show = if_else(time<Sys.time(),TRUE,FALSE)) %>% 
             # mutate(show = if_else(time<Sys.time()+lubridate::weeks(2),TRUE,FALSE)) %>% 
             filter(show == TRUE) %>% 
-            select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) 
+            select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) %>% 
+            rename(`Email Address` = email_address, Bowl = bowl, Home = home, `Home Score` = homescore,
+                   Away = away, `Away Score` = awayscore, Pick = pick, `Calculated Confidence` = confidence,
+                   `Points If Correct` = pointsifcorrect, `Points If Wrong` = pointsifwrong, Winner = winner)
         return(rthis)
     }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
     
@@ -241,13 +250,18 @@ server <- function(input, output) {
             # rdata %>%
             forappdata() %>%
             group_by(email_address) %>%
-            summarise(Points = sum(Points))
+            summarise(Points = sum(Points)) %>% 
+            rename(`Email Address` = email_address) %>% 
+            arrange(Points)
     }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
 
     output$gameinfo = renderDataTable({
         gameinfooutput =
             fulldata %>%
-            select(bowl,home,away,time,homepred,awaypred,homescore,awayscore)
+            select(bowl,home,away,time,homepred,awaypred,homescore,awayscore) %>% 
+            rename(Bowl = bowl, Home = home, Away = away, Time = time,
+                   `Home Prediction` = homepred, `Away Prediction` = awaypred, 
+                   `Home Score` = homescore, `Away Score` = awayscore)
         return(gameinfooutput)
     }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
     
