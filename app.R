@@ -75,7 +75,7 @@ this.content1 <- fromJSON(this.raw.content1)
 raw.result2 <- GET(url = url2)
 this.raw.content2 <- rawToChar(raw.result2$content)
 this.content2 <- fromJSON(this.raw.content2)
-listviewer::jsonedit(this.content2)
+# listviewer::jsonedit(this.content2)
 
 scorevec1 =
     this.content1$events$competitions %>%
@@ -180,7 +180,7 @@ server <- function(input, output) {
             bind_cols(baseline,baseline2) 
 
         rdata =
-            baseline3 %>% 
+            baseline3 %>%
             bind_rows(data) %>%
             janitor::clean_names() %>%
             rename(pin = provide_a_4_digit_pin_between_1000_and_9999_so_you_can_access_your_data_in_the_app_and_update_your_picks_at_a_later_date) %>% 
@@ -188,18 +188,33 @@ server <- function(input, output) {
             separate(bowl, sep = "_or_", c("home", "away")) %>% 
             mutate(home = str_remove(home, "a_"), away = str_remove(away, "b_")) %>%
             mutate(home = to_any_case(home, case = "upper_camel", sep_out = " ")) %>%
-            mutate(away = to_any_case(away, case = "upper_camel", sep_out = " "))  %>%
+            mutate(away = to_any_case(away, case = "upper_camel", sep_out = " ")) %>%  
             mutate(away = if_else(away == "Charlotte 49 Ers", "Charlotte 49ers", away)) %>%
+            mutate(home = if_else(home == "Smu Mustangs", "SMU Mustangs", home)) %>%
+            mutate(home = if_else(home == "Ucf Knights", "UCF Knights", home)) %>%
+            mutate(home = if_else(home == "Usc Trojans", "USC Trojans", home)) %>%
+            mutate(home = if_else(home == "Hawaii Rainbow Warriors", "Hawai'i Rainbow Warriors", home)) %>%
+            mutate(home = if_else(home == "Louisiana Ragin Cajuns", "Louisiana Ragin' Cajuns", home)) %>%
+            mutate(away = if_else(away == "Uab Blazers", "UAB Blazers", away)) %>%
+            mutate(away = if_else(away == "Byu Cougars", "BYU Cougars", away)) %>%
+            mutate(away = if_else(away == "Texas A M Aggies", "Texas A&M Aggies", away)) %>%
+            mutate(away = if_else(away == "Lsu Tigers", "LSU Tigers", away)) %>%
+            mutate(away = if_else(away == "Miami Oh Red Hawks", "Miami (OH) RedHawks", away)) %>% 
+                # select(home,away) %>% as.data.frame() %>% distinct()
+            
+            # fulldata %>% select(home, away) %>% as.data.frame()
+            
+                
             mutate(pick = case_when(value < 50 ~ home,
                                     value > 50 ~ away,
-                                    TRUE ~ "abstain")) %>%
+                                    TRUE ~ "abstain"))  %>% 
             full_join(fulldata %>%
                           select(home, away, bowl, time,homescore,awayscore,gameid),
                       by = c("home", "away")) %>%
-            filter(!is.na(value)) %>%
-            filter(timestamp < time) %>%
+            filter(!is.na(value)) %>% 
+            filter(timestamp < time) %>%  
             group_by(email_address, home, away) %>%
-            filter(timestamp == max(timestamp)) %>%
+            filter(timestamp == max(timestamp)) %>%  
             ungroup() %>%
             mutate(bowl = to_any_case(bowl, case = "upper_camel", sep_out = " "))  %>%
             mutate(value = rescale(value, to = c(0, 1), from = c(0, 100))) %>%
@@ -213,7 +228,12 @@ server <- function(input, output) {
             mutate(winner = if_else(homescore>awayscore,home,if_else(awayscore>homescore,away,"Tied"))) %>%
             mutate(pointsifcorrect = round(pmin(pointsifhome,pointsifaway),2), pointsifwrong = round(pmax(pointsifhome,pointsifaway),2)) %>%
             mutate(Points = ifelse(homescore != awayscore & winner==pick, pointsifcorrect, if_else(homescore != awayscore & winner!=pick,pointsifwrong,0))) %>% 
-            mutate(Time = stamp("1 March 2019 at 7:30")(time))            
+            mutate(Time = stamp("1 March 2019 at 7:30")(time)) 
+        
+        # rdata %>%
+        #     filter(email_address=="dusty.s.turner@gmail.com") %>%
+        #         select(home,away) %>%  as.data.frame()
+
         
         return(rdata)
     })
@@ -236,7 +256,7 @@ server <- function(input, output) {
         input$refresh
         rthis = forappdata() %>%
             mutate(show = if_else(time<Sys.time(),TRUE,FALSE)) %>% 
-            # mutate(show = if_else(time<Sys.time()+lubridate::weeks(2),TRUE,FALSE)) %>% 
+            # mutate(show = if_else(time<Sys.time()+lubridate::weeks(2),TRUE,FALSE)) %>%
             filter(show == TRUE) %>% 
             select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) %>% 
             rename(`Email Address` = email_address, Bowl = bowl, Home = home, `Home Score` = homescore,
