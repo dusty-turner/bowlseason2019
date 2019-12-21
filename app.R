@@ -40,6 +40,8 @@ urls =
 raw.result <- GET(url = urls$links[1])
 this.raw.content <- rawToChar(raw.result$content)
 this.content <- fromJSON(this.raw.content)
+# listviewer::jsonedit(this.content)
+
 
 getter = function(url = url) {
     raw.result <- GET(url = url)
@@ -48,6 +50,8 @@ getter = function(url = url) {
     game = tibble(
         home = this.content$boxscore$teams$team$displayName[1],  # home
         away = this.content$boxscore$teams$team$displayName[2],  # away
+        homeid = this.content$boxscore$teams$team$id[1],  # home
+        awayid = this.content$boxscore$teams$team$id[2],  # away
         bowl = this.content$header$gameNote,
         time = lubridate::ymd_hm(this.content$header$competitions$date),
         homecolor = this.content$boxscore$teams$team$color[1],  # home
@@ -82,22 +86,54 @@ scorevec1 =
     map("competitors") %>% purrr::flatten() %>%
     map("score") %>% unlist()
 
+teamid1 =
+    this.content1$events$competitions %>% 
+    map("competitors") %>% purrr::flatten() %>% 
+    map("id") %>% unlist()
+
 scorevec2 =
     this.content2$events$competitions %>%
     map("competitors") %>% purrr::flatten() %>%
     map("score") %>% unlist()
 
-# scorevec = append(scorevec,c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
-scorevec = append(scorevec1,scorevec2)
+teamid2 =
+    this.content2$events$competitions %>% 
+    map("competitors") %>% purrr::flatten() %>% 
+    map("id") %>% unlist()
+
+scorevec = append(scorevec1,scorevec2) 
+idvec = append(teamid1,teamid2) 
+
+pointsdfhome =
+    tibble(scorevec,idvec) %>% 
+    mutate(hora = rep(c(FALSE,TRUE),38)) %>% 
+        filter(hora == TRUE) %>% 
+    select(-hora)
+pointsdfaway =
+    tibble(scorevec,idvec) %>% 
+    mutate(hora = rep(c(FALSE,TRUE),38)) %>% 
+        filter(hora == FALSE) %>% 
+    select(-hora)
+
+# fulldata %>% select(home,away,homeid,awayid) %>% 
+#     left_join(pointsdfhome, by = c("homeid"="idvec")) %>% 
+#     rename(homescore = scorevec) %>% 
+#     left_join(pointsdfaway, by = c("awayid"="idvec")) %>% 
+#     rename(awayscore = scorevec) %>% 
+#     select(-c(homeid,awayid))
 
 fulldata =
     map_df(urls$links[-40], ~getter(.)) %>%
     force_tz(time, tzone = "America/Los_Angeles") %>%
     mutate(time = time-hours(5)) %>%
     mutate(date = lubridate::date(time)) %>%
-    mutate(gameid = urls$links[-40]) %>%
-    mutate(homescore = scorevec[rep(c(TRUE,FALSE),length.out = 78)]) %>%
-    mutate(awayscore = scorevec[rep(c(FALSE,TRUE),length.out = 78)])
+    mutate(gameid = urls$links[-40]) %>% 
+    left_join(pointsdfhome, by = c("homeid"="idvec")) %>% 
+    rename(homescore = scorevec) %>% 
+    left_join(pointsdfaway, by = c("awayid"="idvec")) %>% 
+    rename(awayscore = scorevec) %>% 
+    select(-c(homeid,awayid)) %>% 
+    mutate(homescore = as.numeric(homescore),awayscore = as.numeric(awayscore))
 
 ### end live data getter
 
@@ -122,13 +158,16 @@ ui <- fluidPage(
                         tabPanel("All Selections", 
                                  tags$h3("Once a game begins, other players predictions will populate below."),
                                  dataTableOutput("allowed")),
-                        tabPanel("Rankings", dataTableOutput("rankings")),
+                        tabPanel("Rankings", tags$h3("Reminder: Lowest score wins!"), 
+                                 # tags$br(),
+                                 tags$h5("Scores reflect current scores in live games."),
+                                 dataTableOutput("rankings")),
                         tabPanel("Game Info", 
                                  tags$h3("All the following information comes directly from ESPN's bowl game predictions."),
                                  dataTableOutput("gameinfo")),
                         tabPanel("Analysis", 
                                  tags$h3("Analysis of picks and results to follow once games begin."),
-                                 dataTableOutput("analysis")),
+                                 plotOutput("analysis")),
                         tabPanel("Instructions", includeMarkdown("README.md"))
                         # tabPanel("Instructions", includeMarkdown("instructions.md"))
             )
@@ -200,6 +239,7 @@ server <- function(input, output) {
             mutate(away = if_else(away == "Texas A M Aggies", "Texas A&M Aggies", away)) %>%
             mutate(away = if_else(away == "Lsu Tigers", "LSU Tigers", away)) %>%
             mutate(away = if_else(away == "Miami Oh Red Hawks", "Miami (OH) RedHawks", away)) %>% 
+            # mutate(time = force_tz(time))
                 # select(home,away) %>% as.data.frame() %>% distinct()
             
             # fulldata %>% select(home, away) %>% as.data.frame()
@@ -212,7 +252,7 @@ server <- function(input, output) {
                           select(home, away, bowl, time,homescore,awayscore,gameid),
                       by = c("home", "away")) %>%
             filter(!is.na(value)) %>% 
-            filter(timestamp < time) %>%  
+            filter(force_tz(timestamp) <force_tz(time)) %>%   
             group_by(email_address, home, away) %>%
             filter(timestamp == max(timestamp)) %>%  
             ungroup() %>%
@@ -228,11 +268,14 @@ server <- function(input, output) {
             mutate(winner = if_else(homescore>awayscore,home,if_else(awayscore>homescore,away,"Tied"))) %>%
             mutate(pointsifcorrect = round(pmin(pointsifhome,pointsifaway),2), pointsifwrong = round(pmax(pointsifhome,pointsifaway),2)) %>%
             mutate(Points = ifelse(homescore != awayscore & winner==pick, pointsifcorrect, if_else(homescore != awayscore & winner!=pick,pointsifwrong,0))) %>% 
-            mutate(Time = stamp("1 March 2019 at 7:30")(time)) 
+            mutate(Time = stamp("1 March 2019 at 7:30")(time)) %>% 
+            mutate(time = force_tz(time)) %>% 
+            mutate(over = if_else(force_tz(time)<force_tz(Sys.time()),TRUE,FALSE)) 
         
         # rdata %>%
         #     filter(email_address=="dusty.s.turner@gmail.com") %>%
-        #         select(home,away) %>%  as.data.frame()
+        #     slice(38:39) %>%
+        #         select(home,away,homescore, awayscore,Points,pick,pointsifcorrect,pointsifwrong,selection,winner,over)
 
         
         return(rdata)
@@ -241,13 +284,14 @@ server <- function(input, output) {
     output$bigtable = renderDataTable({
         input$refresh
         rthis = forappdata() %>%
-            mutate(pin = if_else(time<Sys.time(),99999,pin)) %>% 
+            # mutate(pin = if_else(time<Sys.time(),99999,pin)) %>% 
             filter(email_address == input$email & pin == input$pin) %>% 
             arrange(time) %>% 
-            select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) %>% 
+            select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner,over) %>% 
             rename(`Email Address` = email_address, Bowl = bowl, Home = home, `Home Score` = homescore,
                    Away = away, `Away Score` = awayscore, Pick = pick, `Calculated Confidence` = confidence,
-                   `Points If Correct` = pointsifcorrect, `Points If Wrong` = pointsifwrong, Winner = winner)
+                   `Points If Correct` = pointsifcorrect, `Points If Wrong` = pointsifwrong, Winner = winner)  
+            # formatStyle(~over,target = "row",backgroundColor = styleEqual(c("true", "false"), c('gray', 'yellow'))) %>% 
             
         return(rthis)
     }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
@@ -255,7 +299,10 @@ server <- function(input, output) {
     output$allowed = renderDataTable({
         input$refresh
         rthis = forappdata() %>%
-            mutate(show = if_else(time<Sys.time(),TRUE,FALSE)) %>% 
+            # rdata  %>%
+                # select(bowl, time) %>% arrange(time) %>% distinct() %>%
+                # mutate(Sys.time()) %>%
+            mutate(show = if_else(force_tz(time)<force_tz(Sys.time()),TRUE,FALSE)) %>% 
             # mutate(show = if_else(time<Sys.time()+lubridate::weeks(2),TRUE,FALSE)) %>%
             filter(show == TRUE) %>% 
             select(email_address,bowl,home,homescore,away,awayscore,pick,confidence,Time,pointsifcorrect,pointsifwrong,winner) %>% 
@@ -267,12 +314,18 @@ server <- function(input, output) {
     
     output$rankings = renderDataTable({
         rankingsoutput =
-            # rdata %>%
-            forappdata() %>%
+                # rdata %>%
+            forappdata() %>% 
+            mutate(show = if_else(force_tz(time)<force_tz(Sys.time()),TRUE,FALSE)) %>% 
+            filter(show == TRUE) %>% 
+            select(email_address, show, Points)  %>% 
             group_by(email_address) %>%
-            summarise(Points = sum(Points)) %>% 
-            rename(`Email Address` = email_address) %>% 
+            summarise(Points = sum(Points)) %>%
+            rename(`Email Address` = email_address) %>%
             arrange(Points)
+        # return(forappdata())
+        return(rankingsoutput)
+            # mutate("test")
     }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
 
     output$gameinfo = renderDataTable({
@@ -281,9 +334,38 @@ server <- function(input, output) {
             select(bowl,home,away,time,homepred,awaypred,homescore,awayscore) %>% 
             rename(Bowl = bowl, Home = home, Away = away, Time = time,
                    `Home Prediction` = homepred, `Away Prediction` = awaypred, 
-                   `Home Score` = homescore, `Away Score` = awayscore)
+                   `Home Score` = homescore, `Away Score` = awayscore) %>% 
+        mutate(Time = stamp("1 March 2019 at 7:30")(Time)) 
         return(gameinfooutput)
     }, filter = 'top', options = list(pageLength = 50, autoWidth = TRUE))
+
+    output$analysis = renderPlot({
+        forappdata() %>% 
+        
+        # rdata %>%
+            filter(over == TRUE) %>%
+            group_by(email_address) %>%
+            summarise(Points = sum(Points)) %>%
+            full_join(
+                forappdata() %>%
+                    filter(over == FALSE) %>%
+                    group_by(email_address) %>%
+                    summarise(best = sum(pointsifcorrect),worst = sum(pointsifwrong)),
+                by = "email_address"
+            ) %>% 
+            mutate(best = Points+best, worst = Points+worst) %>% 
+            mutate(email_address = str_remove(email_address, pattern = "@.*")) %>%
+            mutate(email_address = str_replace_all(email_address,"[.]"," ")) %>%
+            mutate(email_address = snakecase::to_upper_camel_case(email_address)) %>%
+            ggplot(aes(x=fct_reorder(email_address,Points),y=Points)) +
+            geom_point() +
+            geom_errorbar(aes(ymin = best,ymax = worst)) +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+            labs(title = "Current Standings",
+                subtitle = "Max and min scores represented by errorbars based on current selections",
+                y = "Points Scored",
+                x = "")
+    })
     
     
 }

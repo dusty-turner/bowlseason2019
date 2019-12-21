@@ -1,6 +1,8 @@
 Instructions
 ============
 
+(Version: 4.1.3)
+
 **This app is a work in progress.  Please check back often to see improvements with the functionality.**
 
 Here are the instructions:
