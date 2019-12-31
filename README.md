@@ -1,9 +1,11 @@
 Instructions
 ============
 
-(Version: 4.1.3)
+(Version: 4.2) 30 DEC
 
-**This app is a work in progress.  Please check back often to see improvements with the functionality.**
+New Additions to Analysis
+
+**There is a known issue with games on 31 December.  For some reason they are now shoing up in the ESPN API.  If they do not show up on the day of the game, I will have to add them in by hand and the scoring will be delayed until I can add in the scores.**
 
 Here are the instructions:
 
