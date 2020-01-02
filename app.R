@@ -74,7 +74,7 @@ url2 = "http://site.api.espn.com/apis/site/v2/sports/football/college-football/s
 raw.result1 <- GET(url = url)
 this.raw.content1 <- rawToChar(raw.result1$content)
 this.content1 <- fromJSON(this.raw.content1)
-# listviewer::jsonedit(this.content1)
+listviewer::jsonedit(this.content1)
 
 raw.result2 <- GET(url = url2)
 this.raw.content2 <- rawToChar(raw.result2$content)
@@ -119,12 +119,6 @@ pointsdfaway =
         filter(hora == FALSE) %>% 
     select(-hora)
 
-# fulldata %>% select(home,away,homeid,awayid) %>% 
-#     left_join(pointsdfhome, by = c("homeid"="idvec")) %>% 
-#     rename(homescore = scorevec) %>% 
-#     left_join(pointsdfaway, by = c("awayid"="idvec")) %>% 
-#     rename(awayscore = scorevec) %>% 
-
 fulldata =
     map_df(urls$links[-40], ~getter(.)) %>%
     force_tz(time, tzone = "America/Los_Angeles") %>%
@@ -140,26 +134,35 @@ fulldata =
     filter(home!="Clemson Tigers" | homescore!=0) %>% 
     filter(away!="LSU Tigers" | awayscore!=0)
 
-# fulldata %>% as.data.frame()
-# 
-# pointsdfhome %>% as.data.frame()
+fulldata =
+fulldata %>% 
+    # select(bowl, homescore, awayscore, away) %>% filter(is.na(awayscore)) %>% 
+    mutate(awayscore = case_when(bowl == "REDBOX BOWL" ~ 20,
+                                 bowl == "CAMPING WORLD BOWL" ~ 9,
+                                 bowl == "FRANKLIN AMERICAN MORTGAGE MUSIC CITY BOWL" ~ 38,
+                                 bowl == "SERVPRO FIRST RESPONDER BOWL" ~ 20,
+                                 bowl == "CAPITAL ONE ORANGE BOWL" ~ 28,
+                                 bowl == "VALERO ALAMO BOWL" ~ 38,
+                                 bowl == "AUTOZONE LIBERTY BOWL" ~ 17,
+                                 bowl == "BELK BOWL" ~ 37,
+                                 bowl == "TONY THE TIGER SUN BOWL" ~ 20,
+                                 bowl == "NOVA HOME LOANS ARIZONA BOWL" ~ 17,
+                                 TRUE ~ awayscore)) %>% 
+    mutate(homescore = case_when(bowl == "REDBOX BOWL" ~ 35,
+                                 bowl == "CAMPING WORLD BOWL" ~ 33,
+                                 bowl == "FRANKLIN AMERICAN MORTGAGE MUSIC CITY BOWL" ~ 28,
+                                 bowl == "SERVPRO FIRST RESPONDER BOWL" ~ 23,
+                                 bowl == "CAPITAL ONE ORANGE BOWL" ~ 36,
+                                 bowl == "VALERO ALAMO BOWL" ~ 10,
+                                 bowl == "AUTOZONE LIBERTY BOWL" ~ 20,
+                                 bowl == "BELK BOWL" ~ 30,
+                                 bowl == "TONY THE TIGER SUN BOWL" ~ 14,
+                                 bowl == "NOVA HOME LOANS ARIZONA BOWL" ~ 38,
+                                 TRUE ~ homescore)) %>% 
+    distinct(.keep_all = TRUE)
 
-# getter(urls$links[26])
-# map_df(urls$links[26], ~getter(.)) %>%
-#     force_tz(time, tzone = "America/Los_Angeles") %>%
-#     mutate(time = time-hours(5)) %>%
-#     mutate(date = lubridate::date(time)) %>%
-#     mutate(gameid = urls$links[26]) %>% 
-#     left_join(pointsdfhome, by = c("homeid"="idvec")) %>% 
-#     rename(homescore = scorevec) %>% 
-#     left_join(pointsdfaway, by = c("awayid"="idvec")) %>% 
-#     rename(awayscore = scorevec) %>% 
-#     select(-c(homeid,awayid)) %>% 
-#     mutate(homescore = as.numeric(homescore),awayscore = as.numeric(awayscore)) %>% 
-#     filter(home!="Clemson Tigers" | homescore!=0) %>% 
-#     filter(away!="LSU Tigers" | awayscore!=0)
-
-
+# fulldata %>% select(homescore,awayscore,bowl) %>% 
+#     filter(bowl == "REDBOX BOWL")
 
 ### end live data getter
 
@@ -305,20 +308,12 @@ server <- function(input, output) {
             mutate(time = force_tz(time,tz="America/New_York")) %>% 
                 # select(time, timestamp) %>% arrange(time) %>% distinct(time)
             mutate(over = if_else(force_tz(time,tz="America/New_York")<force_tz(Sys.time(),tz="America/New_York"),TRUE,FALSE)) 
-                # group_by(time) %>% filter(row_number()== n()) %>% 
-                # ungroup() %>% 
-                # select(time, bowl, over, home) %>%  arrange(-over) %>% 
-                # filter(home == "Liberty Flames")
         
-        # rdata %>% 
-        #     # filter(bowl == "Belk Bowl") %>% 
-        #     filter(bowl == "Outback Bowl") %>%
-        #     select(email_address,winner) 
+
         
-        # rdata %>%
-        #     filter(email_address=="dusty.s.turner@gmail.com") %>%
-        #     slice(38:39) %>%
-        #         select(home,away,homescore, awayscore,Points,pick,pointsifcorrect,pointsifwrong,selection,winner,over)
+        rdata %>% filter(email_address=="dusty.s.turner@gmail.com") %>%
+            filter(bowl == "Redbox Bowl") %>%
+            select(winner)
 
         return(rdata)
     })
